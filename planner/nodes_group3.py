@@ -297,8 +297,9 @@ def coder_agent(
     ros2_arch_file = state["ros2_arch_file"]
     # Run coder agent
     project_root = os.path.dirname(os.path.dirname(__file__))
-    coder_agent_script = os.path.join(project_root, "experiments/RQ3/coder_agent_group3.py")
-
+    coder_agent_script = os.path.join(
+        project_root, "baselines", "baseline", "coder_agent_group3.py"
+    )
     command = [
         sys.executable, coder_agent_script,
         "-r", ros2_arch_file,
