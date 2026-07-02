@@ -1,0 +1,716 @@
+package Flight_Controller
+public
+	with Base_Types;
+--	with Data_Model;
+
+	-- Note:
+	-- 1. Annex should be defined in implementation;
+	-- 2. Ports should be defined in system features;
+	-- 3. Connections should be defined in system or system implementation.
+	system Flight_Controller
+	end Flight_Controller;
+
+	system implementation Flight_Controller.impl
+		subcomponents
+			controller_soft: process controller_soft.impl;
+			fcc_bus: bus fcc_bus;
+			sensor: device sensor;
+			mem: memory mem;
+			proc: processor proc;
+		connections
+			b1: bus access sensor.s1 -> fcc_bus.b1;
+			b2: bus access mem.m1 -> fcc_bus.b1;
+			b3: bus access proc.p1 -> fcc_bus.b1;
+			-- sensor to controller_soft
+			c1: port sensor.Expected_vx -> controller_soft.Expected_vx;
+			c2: port sensor.Feedback_vx -> controller_soft.Feedback_vx;
+			c3: port sensor.Expected_vy -> controller_soft.Expected_vy;
+			c4: port sensor.Feedback_vy -> controller_soft.Feedback_vy;
+			c5: port sensor.Expected_z -> controller_soft.Expected_z;
+			c6: port sensor.Feedback_z -> controller_soft.Feedback_z;
+			c7: port sensor.Expected_yaw -> controller_soft.Expected_yaw;
+			c8: port sensor.Feedback_yaw -> controller_soft.Feedback_yaw;
+			c9: port sensor.Feedback_roll -> controller_soft.Feedback_roll;
+			c10: port sensor.Feedback_pitch -> controller_soft.Feedback_pitch;
+			c11: port sensor.Feedback_vz -> controller_soft.Feedback_vz;
+			c12: port sensor.Feedback_r -> controller_soft.Feedback_r;
+			c13: port sensor.Feedback_p -> controller_soft.Feedback_p;
+			c14: port sensor.Feedback_q -> controller_soft.Feedback_q;
+			-- feedback to sensor
+			c15: port controller_soft.ax -> sensor.ax;
+			c16: port controller_soft.ay -> sensor.ay;
+			c17: port controller_soft.az -> sensor.az;
+			c18: port controller_soft.p -> sensor.p;
+			c19: port controller_soft.q -> sensor.q;
+			c20: port controller_soft.r -> sensor.r;
+	end Flight_Controller.impl;
+
+	bus fcc_bus
+		features
+			b1: provides bus access;
+	end fcc_bus;
+
+	processor proc
+		features
+			p1: requires bus access;
+	end proc;
+
+	memory mem
+		features
+			m1: requires bus access;
+	end mem;
+
+	device sensor
+		features
+		-- command_in: requires bus access;
+			Expected_vx: out event data port Base_Types::Float_32;
+			Expected_vy: out event data port Base_Types::Float_32;
+			Expected_z: out event data port Base_Types::Float_32;
+			Expected_yaw: out event data port Base_Types::Float_32;
+
+			Feedback_vx: out event data port Base_Types::Float_32;
+			Feedback_vy: out event data port Base_Types::Float_32;
+			Feedback_z: out event data port Base_Types::Float_32;
+
+			Feedback_yaw: out event data port Base_Types::Float_32;
+			Feedback_roll: out event data port Base_Types::Float_32;
+			Feedback_pitch: out event data port Base_Types::Float_32;
+			Feedback_vz: out event data port Base_Types::Float_32;
+
+			Feedback_r: out event data port Base_Types::Float_32;
+			Feedback_p: out event data port Base_Types::Float_32;
+			Feedback_q: out event data port Base_Types::Float_32;
+
+			ax: in event data port Base_Types::Float_32;
+			ay: in event data port Base_Types::Float_32;
+			az: in event data port Base_Types::Float_32;
+			p: in event data port Base_Types::Float_32;
+			q: in event data port Base_Types::Float_32;
+			r: in event data port Base_Types::Float_32;
+
+			s1: requires bus access;
+	end sensor;
+
+	process controller_soft
+		features
+			-- command_in: requires bus access;
+			Expected_vx: in event data port Base_Types::Float_32;
+			Expected_vy: in event data port Base_Types::Float_32;
+			Expected_z: in event data port Base_Types::Float_32;
+			Expected_yaw: in event data port Base_Types::Float_32;
+
+			Feedback_vx: in event data port Base_Types::Float_32;
+			Feedback_vy: in event data port Base_Types::Float_32;
+			Feedback_z: in event data port Base_Types::Float_32;
+
+			Feedback_yaw: in event data port Base_Types::Float_32;
+			Feedback_roll: in event data port Base_Types::Float_32;
+			Feedback_pitch: in event data port Base_Types::Float_32;
+			Feedback_vz: in event data port Base_Types::Float_32;
+
+			Feedback_r: in event data port Base_Types::Float_32;
+			Feedback_p: in event data port Base_Types::Float_32;
+			Feedback_q: in event data port Base_Types::Float_32;
+
+			ax: out event data port Base_Types::Float_32;
+			ay: out event data port Base_Types::Float_32;
+			az: out event data port Base_Types::Float_32;
+			p: out event data port Base_Types::Float_32;
+			q: out event data port Base_Types::Float_32;
+			r: out event data port Base_Types::Float_32;
+	end controller_soft;
+
+	process implementation controller_soft.impl
+		subcomponents
+			Horizontal_Velocity_Loop_x: thread x_Velocity_Loop.Impl;
+			Horizontal_Velocity_Loop_y: thread y_Velocity_Loop.Impl;
+			Yaw_Angle_Loop: thread Yaw_Angle_Loop.Impl;
+			Roll_Angle_Loop: thread Roll_Angle_Loop.Impl;
+			Pitch_Angle_Loop: thread Pitch_Angle_Loop.Impl;
+			Angular_Velocity_Loop_Angle: thread Yaw_Angular_Loop.Impl;
+			Angular_Velocity_Loop_x: thread Roll_Angular_Loop.Impl;
+			Angular_Velocity_Loop_y: thread Pitch_Angular_Loop.Impl;
+			Altitude_Loop: thread Altitude_Loop.Impl;
+			Vertical_Velocity_Loop: thread VVL.Impl;
+			Vertical_Acceleration_Loop: thread VAL.Impl;
+			
+			Control_Allocation: thread Control_Allocation.Impl;
+			Quad_Motors: thread Quad_Motors.impl;
+			Motions: thread Motions.impl;
+
+		connections
+			-- main information flow
+			-- X-direction loop Horizontal_Velocity_Loop_x
+			x1: port Expected_vx -> Horizontal_Velocity_Loop_x.Expected_vx;
+			x11: port Feedback_vx -> Horizontal_Velocity_Loop_x.Feedback_vx;
+
+			-- X-direction loop Roll_Angle_Loop
+			x2: port Horizontal_Velocity_Loop_x.Expected_roll -> Roll_Angle_Loop.Expected_roll;
+			x12: port Feedback_Roll -> Roll_Angle_Loop.Feedback_Roll;
+
+			-- X-direction loop Angular_Velocity_Loop_x
+			x3: port Roll_Angle_Loop.Expected_p -> Angular_Velocity_Loop_x.Expected_p;
+			x13: port Feedback_p -> Angular_Velocity_Loop_x.Feedback_p;
+			x4: port Angular_Velocity_Loop_x.u2 -> Control_Allocation.u2;
+			-- X-direction feedback
+			-- Y-direction loop Horizontal_Velocity_Loop_y
+			y1: port Expected_vy -> Horizontal_Velocity_Loop_y.Expected_vy;
+			y11: port Feedback_vy -> Horizontal_Velocity_Loop_y.Feedback_vy;
+
+			-- Y-direction loop Pitch_Angle_Loop
+			y2: port Horizontal_Velocity_Loop_y.Expected_pitch -> Pitch_Angle_Loop.Expected_pitch;
+			y12: port Feedback_Pitch -> Pitch_Angle_Loop.Feedback_Pitch;
+
+			-- Y-direction loop Angular_Velocity_Loop_y			
+			y3: port Pitch_Angle_Loop.Expected_q -> Angular_Velocity_Loop_y.Expected_q;
+			y13: port Feedback_q -> Angular_Velocity_Loop_y.Feedback_q;
+			y4: port Angular_Velocity_Loop_y.u3 -> Control_Allocation.u3;
+
+			-- Angular loop Yaw_Angle_Loop
+			Angular1: port Expected_yaw -> Yaw_Angle_Loop.Expected_yaw;
+			Angular11: port Feedback_Yaw -> Yaw_Angle_Loop.Feedback_Yaw;
+
+			-- Angular loop Angular_Velocity_Loop_Angle
+			Angular2: port Yaw_Angle_Loop.Expected_r -> Angular_Velocity_Loop_Angle.Expected_r;
+			Angular12: port Feedback_r -> Angular_Velocity_Loop_Angle.Feedback_r;
+			Angular3: port Angular_Velocity_Loop_Angle.u4 -> Control_Allocation.u4;
+
+			-- Altitude loop Altitude_Loop
+			Altitude1: port Expected_z -> Altitude_Loop.Expected_z;
+			Altitude11: port Feedback_z -> Altitude_Loop.Feedback_z;
+
+			-- Altitude loop Vertical_Velocity_Loop
+			Altitude2: port Altitude_Loop.Expected_vz -> Vertical_Velocity_Loop.Expected_vz;
+			Altitude12: port Feedback_vz -> Vertical_Velocity_Loop.Feedback_vz;
+
+			-- Altitude loop Vertical_Acceleration_Loop
+			Altitude3: port Vertical_Velocity_Loop.Expected_az -> Vertical_Acceleration_Loop.Expected_az;
+			Altitude13: port Feedback_roll -> Vertical_Acceleration_Loop.Feedback_roll;
+			Altitude14: port Feedback_pitch -> Vertical_Acceleration_Loop.Feedback_pitch;
+			Altitude4: port Vertical_Acceleration_Loop.u1 -> Control_Allocation.u1;
+
+			-- Control allocation
+			ca1: port Control_Allocation.pwm1 -> Quad_Motors.pwm1;
+			ca2: port Control_Allocation.pwm2 -> Quad_Motors.pwm2;
+			ca3: port Control_Allocation.pwm3 -> Quad_Motors.pwm3;
+			ca4: port Control_Allocation.pwm4 -> Quad_Motors.pwm4;
+
+			-- Quad Motors
+			qm1: port Quad_Motors.f1 -> Motions.f1;
+			qm2: port Quad_Motors.f2 -> Motions.f2;
+			qm3: port Quad_Motors.f3 -> Motions.f3;
+			qm4: port Quad_Motors.f4 -> Motions.f4;
+
+			-- Motions
+			m11: port Feedback_Roll -> Motions.roll;
+			m12: port Feedback_Pitch -> Motions.pitch;
+			m13: port Feedback_Yaw -> Motions.yaw;
+			m14: port Feedback_vx -> Motions.vx;
+			m15: port Feedback_vy -> Motions.vy;
+			m16: port Feedback_vz -> Motions.vz;
+			m17: port Feedback_p -> Motions.p_in;
+			m18: port Feedback_q -> Motions.q_in;
+			m19: port Feedback_r -> Motions.r_in;
+
+			m1: port Motions.ax -> ax;
+			m2: port Motions.ay -> ay;
+			m3: port Motions.az -> az;
+			m4: port Motions.p -> p;
+			m5: port Motions.q -> q;
+			m6: port Motions.r -> r;
+		
+	end controller_soft.impl;
+
+	thread x_Velocity_Loop
+		features
+			Expected_vx: in event data port Base_Types::Float_32;
+			Feedback_vx: in event data port Base_Types::Float_32;
+			Expected_roll: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 100ms;
+			Deadline => 90ms;
+			Compute_Execution_Time => 30ms .. 50ms;
+	end x_Velocity_Loop;
+
+	thread implementation x_Velocity_Loop.Impl
+		annex behavior_specification {**variables
+           offset2 : Base_Types::Float_32;
+           sum : Base_Types::Float_32;
+           diff : Base_Types::Float_32;
+		   x_Velocity_Loop_last_offset:  Base_Types::Float_32;
+		   x_Velocity_Loop_last_sum:  Base_Types::Float_32;
+		   x_Velocity_Loop_now_offset:  Base_Types::Float_32;
+		   x_Velocity_Loop_now_sum:  Base_Types::Float_32;
+		   kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("1.8");};
+		   ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.4");};
+		   kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.2");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_vx - Feedback_vx;
+              sum := x_Velocity_Loop_last_sum + offset2;
+              diff := offset2 - x_Velocity_Loop_last_offset;
+              Expected_roll := kp * offset2  + ki * sum + kd * diff;
+              x_Velocity_Loop_now_sum := sum;
+              x_Velocity_Loop_now_offset := offset2
+            };
+ 
+        **};
+	end x_Velocity_Loop.Impl;
+
+	thread y_Velocity_Loop
+		features
+			Expected_vy: in event data port Base_Types::Float_32;
+			Feedback_vy: in event data port Base_Types::Float_32;
+			Expected_pitch: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 100ms;
+			Deadline => 90ms;
+			Compute_Execution_Time => 30ms .. 50ms;
+	end y_Velocity_Loop;
+
+	thread implementation y_Velocity_Loop.Impl
+		annex behavior_specification {**variables
+           offset2 : Base_Types::Float_32;
+           sum : Base_Types::Float_32;
+           diff : Base_Types::Float_32;
+		   y_Velocity_Loop_last_offset:  Base_Types::Float_32;
+		   y_Velocity_Loop_last_sum:  Base_Types::Float_32;
+		   y_Velocity_Loop_now_offset:  Base_Types::Float_32;
+		   y_Velocity_Loop_now_sum:  Base_Types::Float_32;
+		   kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("1.8");};
+			ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.4");};
+			kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.2");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_vy - Feedback_vy;
+              sum := y_Velocity_Loop_last_sum + offset2;
+              diff := offset2 - y_Velocity_Loop_last_offset;
+              Expected_pitch := kp * offset2  + ki * sum + kd * diff;
+              y_Velocity_Loop_now_sum := sum;
+              y_Velocity_Loop_now_offset := offset2
+            };
+        **};
+	end y_Velocity_Loop.Impl;
+
+	thread Yaw_Angle_Loop
+		features
+			Expected_yaw: in event data port Base_Types::Float_32;
+			Feedback_yaw: in event data port Base_Types::Float_32;
+			Expected_r: out event data port Base_Types::Float_32;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 80ms;
+			Deadline => 80ms;
+			Compute_Execution_Time => 20ms .. 30ms;
+	end Yaw_Angle_Loop;
+
+	thread implementation Yaw_Angle_Loop.Impl
+		annex behavior_specification {**variables
+			kp:  Base_Types::Float_32 {Data_Model::Initial_Value => ("2.8");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              Expected_r := kp * (Expected_yaw - Feedback_Yaw)
+            };
+        **};
+	end Yaw_Angle_Loop.Impl;
+
+	thread Roll_Angle_Loop
+		features
+			Expected_roll: in event data port Base_Types::Float_32;
+			Feedback_Roll: in event data port Base_Types::Float_32;
+			Expected_p: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 80ms;
+			Deadline => 80ms;
+			Compute_Execution_Time => 20ms .. 30ms;
+	end Roll_Angle_Loop;
+
+	thread implementation Roll_Angle_Loop.Impl
+		annex behavior_specification {**variables
+			kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("6.5");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              Expected_p := kp * (Expected_roll - Feedback_Roll)
+            };
+        **};
+	end Roll_Angle_Loop.Impl;
+
+	thread Pitch_Angle_Loop
+		features
+			Expected_pitch: in event data port Base_Types::Float_32;
+			Feedback_Pitch: in event data port Base_Types::Float_32;
+			Expected_q: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 80ms;
+			Deadline => 80ms;
+			Compute_Execution_Time => 20ms .. 30ms;
+	end Pitch_Angle_Loop;
+
+	thread implementation Pitch_Angle_Loop.Impl
+		annex behavior_specification {**variables
+			kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("6.5");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              Expected_q := kp * (Expected_pitch - Feedback_Pitch)
+            };
+        **};
+	end Pitch_Angle_Loop.Impl;
+
+	thread Yaw_Angular_Loop
+		features
+			Expected_r: in event data port Base_Types::Float_32;
+			Feedback_r: in event data port Base_Types::Float_32;
+			u4: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 50ms;
+			Deadline => 50ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+	end Yaw_Angular_Loop;
+
+	thread implementation Yaw_Angular_Loop.Impl
+		annex behavior_specification {**variables
+           offset2 : Base_Types::Float_32;
+           sum : Base_Types::Float_32;
+           diff : Base_Types::Float_32;
+		   Yaw_Angular_Loop_last_offset:  Base_Types::Float_32;
+		   Yaw_Angular_Loop_last_sum:  Base_Types::Float_32;
+		   Yaw_Angular_Loop_now_offset:  Base_Types::Float_32;
+		   Yaw_Angular_Loop_now_sum:  Base_Types::Float_32;
+		   kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.2");};
+		   ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.1");};
+		   kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.0");};
+		   kt: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.00000584");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_r - Feedback_r;
+              sum := Yaw_Angular_Loop_last_sum + offset2;
+              diff := offset2 - Yaw_Angular_Loop_last_offset;
+              u4 := (kp * offset2  + ki * sum + kd * diff) /( kt * 1897 * 1897 );
+              Yaw_Angular_Loop_now_sum := sum;
+              Yaw_Angular_Loop_now_offset := offset2
+            };
+        **};
+	end Yaw_Angular_Loop.Impl;
+
+	thread Roll_Angular_Loop
+		features
+			Expected_p: in event data port Base_Types::Float_32;
+			Feedback_p: in event data port Base_Types::Float_32;
+			u2: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 50ms;
+			Deadline => 50ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+	end Roll_Angular_Loop;
+
+	thread implementation Roll_Angular_Loop.Impl
+		annex behavior_specification {**variables
+            offset2 : Base_Types::Float_32;
+            sum : Base_Types::Float_32;
+            diff : Base_Types::Float_32;
+			Roll_Angular_Loop_last_offset:  Base_Types::Float_32;
+			Roll_Angular_Loop_last_sum:  Base_Types::Float_32;
+			Roll_Angular_Loop_now_offset:  Base_Types::Float_32;
+			Roll_Angular_Loop_now_sum:  Base_Types::Float_32;
+			kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.15");};
+			ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.2");};
+			kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.003");};
+			kt: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.00000584");};
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_p - Feedback_p; 
+              sum := Roll_Angular_Loop_last_sum + offset2;
+              diff := offset2 - Roll_Angular_Loop_last_offset;
+              u2 := (kp * offset2  + ki * sum + kd * diff) / (kt * 1897 * 1897);
+              Roll_Angular_Loop_now_sum := sum;
+              Roll_Angular_Loop_now_offset := offset2     
+            };
+        **};
+	end Roll_Angular_Loop.Impl;
+
+	thread Pitch_Angular_Loop
+		features
+			Expected_q: in event data port Base_Types::Float_32;
+			Feedback_q: in event data port Base_Types::Float_32;
+			u3: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 50ms;
+			Deadline => 50ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+	end Pitch_Angular_Loop;
+
+	thread implementation Pitch_Angular_Loop.Impl
+		annex behavior_specification {**variables
+            offset2 : Base_Types::Float_32;
+            sum : Base_Types::Float_32;
+            diff : Base_Types::Float_32;
+			Pitch_Angular_Loop_last_offset:  Base_Types::Float_32;
+			Pitch_Angular_Loop_last_sum:  Base_Types::Float_32;
+			Pitch_Angular_Loop_now_offset:  Base_Types::Float_32;
+			Pitch_Angular_Loop_now_sum:  Base_Types::Float_32;
+			kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.15");};
+			ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.2");};
+			kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.003");};
+			kt: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.00000584");};	
+          states
+            init : initial complete state;
+            output : final state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_q - Feedback_q;
+              sum := Pitch_Angular_Loop_last_sum + offset2;
+              diff := offset2 - Pitch_Angular_Loop_last_offset;
+              u3 := (kp * offset2  + ki * sum + kd * diff) / (kt * 1897 * 1897);
+              Pitch_Angular_Loop_now_sum := sum;
+              Pitch_Angular_Loop_now_offset := offset2
+            };
+        **};
+	end Pitch_Angular_Loop.Impl;
+
+	thread Altitude_Loop
+		features
+			Expected_z: in event data port Base_Types::Float_32;
+			Feedback_z: in event data port Base_Types::Float_32;
+			Expected_vz: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 100ms;
+			Deadline => 90ms;
+			Compute_Execution_Time => 30ms .. 50ms;
+	end Altitude_Loop;
+
+	thread implementation Altitude_Loop.Impl
+		annex behavior_specification {**variables
+			kp:  Base_Types::Float_32 {Data_Model::Initial_Value => ("1.0");};
+
+			states
+				init : initial complete state;
+				output:  final state;
+			transitions
+				init -[on dispatch]-> output {
+					Expected_vz := kp * (Expected_z - Feedback_z)
+				};
+		**};
+	end Altitude_Loop.Impl;
+
+	thread VVL
+		features
+			Expected_vz: in event data port Base_Types::Float_32;
+			Feedback_vz: in event data port Base_Types::Float_32;
+			Expected_az: out event data port Base_Types::Float_32;
+
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 100ms;
+			Deadline => 90ms;
+			Compute_Execution_Time => 30ms .. 50ms;
+	end VVL;
+
+	thread implementation VVL.Impl
+		annex behavior_specification {**variables
+            offset2 : Base_Types::Float_32;
+            sum : Base_Types::Float_32;
+            diff : Base_Types::Float_32;
+			VVL_last_offset:  Base_Types::Float_32;
+			VVL_last_sum:  Base_Types::Float_32;
+			VVL_now_offset:  Base_Types::Float_32;
+			VVL_now_sum:  Base_Types::Float_32;
+			kp: Base_Types::Float_32 {Data_Model::Initial_Value => ("4.0");};
+			ki: Base_Types::Float_32 {Data_Model::Initial_Value => ("2.0");};
+			kd: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.0");};          
+			states
+            init : initial complete state;
+            output : complete state;
+          transitions
+            init -[on dispatch]-> output {
+              offset2 := Expected_vz - Feedback_vz;
+              sum := VVL_last_sum + offset2;
+              diff := offset2 - VVL_last_offset;
+              Expected_az := kp * offset2 + ki * sum + kd * diff;
+              VVL_now_sum := sum;
+              VVL_now_offset := offset2
+            };
+            **};
+	end VVL.Impl;
+
+	thread VAL
+		features
+			Expected_az: in event data port Base_Types::Float_32;
+			Feedback_roll: in event data port Base_Types::Float_32;
+			Feedback_pitch: in event data port Base_Types::Float_32;
+			u1: out event data port Base_Types::Float_32;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 80ms;
+			Deadline => 80ms;
+			Compute_Execution_Time => 20ms .. 30ms;
+	end VAL;
+
+	thread implementation VAL.Impl
+		calls
+			Mycalls: {
+				VAL_compute: subprogram VAL_compute;
+			};
+		connections
+			d1: parameter Expected_az -> VAL_compute.Expected_az;
+			d2: parameter Feedback_roll -> VAL_compute.Feedback_roll;
+			d3: parameter Feedback_pitch -> VAL_compute.Feedback_pitch;
+			d4: parameter VAL_compute.u1 -> u1;
+	end VAL.Impl;
+
+	subprogram VAL_compute
+		features
+			Expected_az: in Parameter Base_Types::Float_32;
+			Feedback_roll: in Parameter Base_Types::Float_32;
+			Feedback_pitch: in Parameter Base_Types::Float_32;
+			u1: out Parameter Base_Types::Float_32;
+	end VAL_compute;
+
+	subprogram implementation VAL_compute.impl
+		properties
+			Source_Name => "flight_controller.val";
+			Source_Language => (C);
+			source_text => ("flight_controller.c");
+	end VAL_compute.impl;
+
+	thread Control_Allocation
+		features
+			u1: in event data port Base_Types::Float_32;
+			u2: in event data port Base_Types::Float_32;
+			u3: in event data port Base_Types::Float_32;
+			u4: in event data port Base_Types::Float_32;
+
+			pwm1: out event data port Base_Types::Integer;
+			pwm2: out event data port Base_Types::Integer;
+			pwm3: out event data port Base_Types::Integer;
+			pwm4: out event data port Base_Types::Integer;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 30ms;
+			Deadline => 30ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+	end Control_Allocation;
+
+	thread implementation Control_Allocation.Impl
+		annex behavior_specification {**states
+				init: initial complete state;
+				output: final state;
+			transitions
+				init -[on dispatch]-> output {
+					pwm1 := 1000 * (1 + u1 - 0.707 * u2 + 0.707 * u3 + u4);
+					pwm2 := 1000 * (1 + u1 + 0.707 * u2 - 0.707 * u3 + u4);
+					pwm3 := 1000 * (1 + u1 + 0.707 * u2 + 0.707 * u3 - u4);
+					pwm4 := 1000 * (1 + u1 - 0.707 * u2 - 0.707 * u3 - u4)
+				};	
+		**};
+	end Control_Allocation.Impl;
+
+	thread Quad_Motors
+		features
+			pwm1: in event data port Base_Types::Integer;
+			pwm2: in event data port Base_Types::Integer;
+			pwm3: in event data port Base_Types::Integer;
+			pwm4: in event data port Base_Types::Integer;
+
+			f1: out event data port Base_Types::Integer;
+			f2: out event data port Base_Types::Integer;
+			f3: out event data port Base_Types::Integer;
+			f4: out event data port Base_Types::Integer;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 30ms;
+			Deadline => 30ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+	end Quad_Motors;
+
+	thread implementation Quad_Motors.impl
+		annex behavior_specification {**variables
+			kt: Base_Types::Float_32 {Data_Model::Initial_Value => ("0.00000584");};
+			states
+				init: initial complete state;
+				output: final state;
+			transitions
+				t1: init -[on dispatch]-> output {
+					f1 := kt * (pwm1/1000 -1) * (pwm1/1000 -1) + kt * 1897 * 1897;
+					f2 := kt * (pwm2/1000 -1) * (pwm2/1000 -1) + kt * 1897 * 1897;
+					f3 := kt * (pwm3/1000 -1) * (pwm3/1000 -1) + kt * 1897 * 1897;
+					f4 := kt * (pwm4/1000 -1) * (pwm4/1000 -1) + kt * 1897 * 1897
+				};
+		**};
+	end Quad_Motors.impl;
+
+	thread Motions
+		features
+			f1: in event data port Base_Types::Integer;
+			f2: in event data port Base_Types::Integer;
+			f3: in event data port Base_Types::Integer;
+			f4: in event data port Base_Types::Integer;
+
+			roll: in event data port Base_Types::Float_32;
+			pitch: in event data port Base_Types::Float_32;
+			yaw: in event data port Base_Types::Float_32;
+
+			p_in: in event data port Base_Types::Float_32;
+			q_in: in event data port Base_Types::Float_32;
+			r_in: in event data port Base_Types::Float_32;
+
+			vx: in event data port Base_Types::Float_32;
+			vy: in event data port Base_Types::Float_32;
+			vz: in event data port Base_Types::Float_32;
+
+			ax: out event data port Base_Types::Float_32;
+			ay: out event data port Base_Types::Float_32;
+			az: out event data port Base_Types::Float_32;
+
+			p: out event data port Base_Types::Float_32;
+			q: out event data port Base_Types::Float_32;
+			r: out event data port Base_Types::Float_32;
+		properties
+			Dispatch_Protocol => Periodic;
+			Period => 30ms;
+			Deadline => 30ms;
+			Compute_Execution_Time => 10ms .. 20ms;
+			source_language => (C);
+			source_text => ("flight_controller.c");
+	end Motions;
+
+	thread implementation Motions.impl
+	end Motions.Impl;
+
+end Flight_Controller;

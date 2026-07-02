@@ -1,0 +1,39 @@
+# Build files
+build/
+install/
+log/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# ROS generated files
+ros_info/
+
+# Test files
+test/ros_generated/
+
+# Experiment files
+contrast_experiment/
+psm_experiment/
+
+# Local-only directories (not published)
+experiments/
+functional_tests/
+paper/
+validation_code/
+
+# IDE files
+.vscode/
+.cursor/
+
+# Log files
+*.log
+*.csv
+
+# Memory files
+memory/
+
+# Token usage stats
+token_usage_stats.json

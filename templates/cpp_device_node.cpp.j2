@@ -1,0 +1,99 @@
+{# ROS 2 Jazzy — architecture device node: timer -> publishers; subscribers receive-only. #}
+{% for h in include_headers %}
+{{ h }}
+{% endfor %}
+#include <random>
+
+using namespace std::chrono_literals;
+
+class {{ class_name }} : public rclcpp::Node
+{
+public:
+    {{ class_name }}() : rclcpp::Node("{{ node_name }}"),
+        rng_(std::random_device{}()),
+        dist_int_(0, 100),
+        dist_float_(0.0, 1.0),
+        dist_bool_(0, 1)
+    {
+{% for s in subscribers %}
+        {
+{% for line in s.qos_lines %}
+            {{ line }}
+{% endfor %}
+            sub_{{ s.index }}_ = this->create_subscription<{{ s.cpp_type }}>(
+                "{{ s.topic }}", qos,
+                [this](const {{ s.cpp_type }}::SharedPtr msg) {
+{% if s.fam == 'bool' %}
+                    RCLCPP_INFO(this->get_logger(), "Received {{ s.port }}: %s", msg->data ? "true" : "false");
+{% elif s.fam == 'int32' %}
+                    RCLCPP_INFO(this->get_logger(), "Received {{ s.port }}: %d", static_cast<int>(msg->data));
+{% elif s.fam == 'string' %}
+                    RCLCPP_INFO(this->get_logger(), "Received {{ s.port }}: %s", msg->data.c_str());
+{% elif s.fam == 'float64' %}
+                    RCLCPP_INFO(this->get_logger(), "Received {{ s.port }}: %f", static_cast<double>(msg->data));
+{% else %}
+                    RCLCPP_INFO(this->get_logger(), "Received {{ s.port }}: %f", static_cast<double>(msg->data));
+{% endif %}
+                });
+        }
+{% endfor %}
+{% for p in publishers %}
+        {
+{% for line in p.qos_lines %}
+            {{ line }}
+{% endfor %}
+            pub_{{ p.index }}_ = this->create_publisher<{{ p.cpp_type }}>("{{ p.topic }}", qos);
+        }
+{% endfor %}
+{% if has_publishers %}
+        timer_ = this->create_wall_timer(
+            5ms,
+            std::bind(&{{ class_name }}::on_publish_timer, this));
+{% endif %}
+{% if has_publishers %}
+        RCLCPP_INFO(this->get_logger(), "device node '{{ node_name }}' ready; publish period 10 ms");
+{% else %}
+        RCLCPP_INFO(this->get_logger(), "device node '{{ node_name }}' ready (subscribe-only)");
+{% endif %}
+    }
+
+private:
+{% if has_publishers %}
+    void on_publish_timer()
+    {
+{% for p in publishers %}
+{% if p.fam == 'bool' %}
+        { {{ p.cpp_type }} m; m.data = static_cast<bool>(dist_bool_(rng_)); pub_{{ p.index }}_->publish(m); RCLCPP_INFO(this->get_logger(), "Published {{ p.port }}: %s", m.data ? "true" : "false"); }
+{% elif p.fam == 'int32' %}
+        { {{ p.cpp_type }} m; m.data = dist_int_(rng_); pub_{{ p.index }}_->publish(m); RCLCPP_INFO(this->get_logger(), "Published {{ p.port }}: %d", static_cast<int>(m.data)); }
+{% elif p.fam == 'string' %}
+        { {{ p.cpp_type }} m; m.data = std::to_string(dist_int_(rng_)); pub_{{ p.index }}_->publish(m); RCLCPP_INFO(this->get_logger(), "Published {{ p.port }}: %s", m.data.c_str()); }
+{% elif p.fam == 'float64' %}
+        { {{ p.cpp_type }} m; m.data = dist_float_(rng_); pub_{{ p.index }}_->publish(m); RCLCPP_INFO(this->get_logger(), "Published {{ p.port }}: %f", static_cast<double>(m.data)); }
+{% else %}
+        { {{ p.cpp_type }} m; m.data = static_cast<float>(dist_float_(rng_)); pub_{{ p.index }}_->publish(m); RCLCPP_INFO(this->get_logger(), "Published {{ p.port }}: %f", static_cast<double>(m.data)); }
+{% endif %}
+{% endfor %}
+    }
+
+    rclcpp::TimerBase::SharedPtr timer_;
+{% endif %}
+    std::mt19937 rng_;
+    std::uniform_int_distribution<int> dist_int_;
+    std::uniform_real_distribution<double> dist_float_;
+    std::uniform_int_distribution<int> dist_bool_;
+{% for s in subscribers %}
+    rclcpp::Subscription<{{ s.cpp_type }}>::SharedPtr sub_{{ s.index }}_;
+{% endfor %}
+{% for p in publishers %}
+    rclcpp::Publisher<{{ p.cpp_type }}>::SharedPtr pub_{{ p.index }}_;
+{% endfor %}
+};
+
+int main(int argc, char ** argv)
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<{{ class_name }}>());
+    rclcpp::shutdown();
+    return 0;
+}

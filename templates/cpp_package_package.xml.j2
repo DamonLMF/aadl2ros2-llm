@@ -1,0 +1,25 @@
+{# Target toolchain: ROS 2 Jazzy (ament, package format 3) #}
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>{{ package_name }}</name>
+  <version>{{ package_version }}</version>
+  <description>{{ description }}</description>
+  <maintainer email="{{ maintainer_email }}">{{ maintainer_name }}</maintainer>
+  <license>{{ license }}</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+{% for dep in ros_dependencies %}
+  <depend>{{ dep }}</depend>
+{% endfor %}
+
+{% if use_ament_lint %}
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+{% endif %}
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,52 @@
+{# Target toolchain: ROS 2 Jazzy (rclcpp, ament_cmake) #}
+#include <rclcpp/rclcpp.hpp>
+{% if has_shared_state %}
+#include <memory>
+#include "{{ package_name }}/shared_sim_state.hpp"
+{% endif %}
+{% for c in components %}
+#include "{{ package_name }}/components/{{ c.name }}.hpp"
+{% endfor %}
+
+class {{ node_class_name }} : public rclcpp::Node
+{
+public:
+    {{ node_class_name }}() : Node("{{ node_name }}")
+    {
+{% if has_shared_state %}
+        sim_state_ = std::make_shared<SharedSimState>();
+{% endif %}
+{% for c in components %}
+        cbg_{{ c.name }}_ = this->create_callback_group(rclcpp::CallbackGroupType::{{ c.group_enum }});
+{% endfor %}
+
+{% for c in components %}
+        comp_{{ c.name }}_ = std::make_shared<{{ c.name }}>(this, cbg_{{ c.name }}_{% if has_shared_state %}, sim_state_{% endif %});
+{% endfor %}
+
+        RCLCPP_INFO(this->get_logger(), "{{ node_name }} node initialized");
+    }
+
+private:
+{% if has_shared_state %}
+    std::shared_ptr<SharedSimState> sim_state_;
+{% endif %}
+{% for c in components %}
+    rclcpp::CallbackGroup::SharedPtr cbg_{{ c.name }}_;
+{% endfor %}
+
+{% for c in components %}
+    std::shared_ptr<{{ c.name }}> comp_{{ c.name }}_;
+{% endfor %}
+};
+
+int main(int argc, char ** argv)
+{
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<{{ node_class_name }}>();
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
+    executor.spin();
+    rclcpp::shutdown();
+    return 0;
+}

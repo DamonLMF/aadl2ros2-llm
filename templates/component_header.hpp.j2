@@ -1,0 +1,79 @@
+{# Target toolchain: ROS 2 Jazzy (rclcpp, ament_cmake) #}
+#pragma once
+
+#include <rclcpp/rclcpp.hpp>
+{% if use_fsm %}
+#include <string>
+#include <cstddef>
+{% endif %}
+{% if has_int32 %}
+#include <cstdint>
+{% endif %}
+{% for inc in include_headers %}
+#include <{{ inc }}>
+{% endfor %}
+{% if has_shared_state %}
+#include <memory>
+#include <mutex>
+#include "{{ package_name }}/shared_sim_state.hpp"
+{% endif %}
+{% for line in other_code_include_lines %}
+{{ line }}
+{% endfor %}
+
+class {{ class_name }}
+{
+public:
+    {{ class_name }}(rclcpp::Node* node, rclcpp::CallbackGroup::SharedPtr cb_group{% if has_shared_state %}, std::shared_ptr<SharedSimState> sim_state{% endif %});
+
+private:
+{% for cb in callbacks %}
+    void {{ cb.port }}_callback(const {{ cb.msg_type }}::SharedPtr msg);
+{% endfor %}
+    void control_loop();
+
+    rclcpp::Node* node_;
+    rclcpp::CallbackGroup::SharedPtr callback_group_;
+    // Logger: initialize in .cpp ctor as logger_(rclcpp::get_logger("{{ ros_logger_prefix }}"));
+    rclcpp::Logger logger_;
+
+    // Subscriptions
+{% for cb in callbacks %}
+    rclcpp::Subscription<{{ cb.msg_type }}>::SharedPtr sub_{{ cb.port }}_;
+{% endfor %}
+
+    // Publishers
+{% for out in outputs %}
+    rclcpp::Publisher<{{ out.msg_type }}>::SharedPtr pub_{{ out.member }}_;
+{% endfor %}
+
+    // Timer
+    rclcpp::TimerBase::SharedPtr timer_;
+
+{% if fsm_states_cpp %}
+    // Full architecture FSM state set (for traceability/debug).
+    static constexpr const char* kFsmStates[] = {
+{% for st in fsm_states_cpp %}
+        "{{ st }}",
+{% endfor %}
+    };
+    static constexpr std::size_t kFsmStateCount = sizeof(kFsmStates) / sizeof(kFsmStates[0]);
+{% endif %}
+{% if use_fsm %}
+    // Current FSM state trace name; managed by component .cpp template.
+    std::string fsm_state_;
+{% endif %}
+    // Cached messages
+{% for cb in callbacks %}
+    {{ cb.msg_type }}::SharedPtr {{ cb.port }}_cache_;
+{% endfor %}
+{% if callbacks and state_var_decls %}
+
+{% endif %}
+{% for decl in state_var_decls %}
+{{ decl }}
+{% endfor %}
+{% if has_shared_state %}
+    std::shared_ptr<SharedSimState> sim_state_;
+{% endif %}
+};

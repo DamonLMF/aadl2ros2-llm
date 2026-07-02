@@ -1,0 +1,56 @@
+# Target toolchain: ROS 2 Jazzy (ament_cmake, colcon)
+cmake_minimum_required(VERSION {{ cmake_minimum_version }})
+project({{ package_name }})
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+{% for dep in find_packages %}
+find_package({{ dep }} REQUIRED)
+{% endfor %}
+
+include_directories(include)
+
+# One helper registers each node target (CMake still needs one add_executable per binary).
+function(package_add_ros2_node target_name)
+  cmake_parse_arguments(_arg "" "" "SOURCES;AMENT_DEPS" ${ARGN})
+  add_executable(${target_name} ${_arg_SOURCES})
+  ament_target_dependencies(${target_name} ${_arg_AMENT_DEPS})
+endfunction()
+
+{% for target in node_targets %}
+package_add_ros2_node({{ target.executable }}
+  SOURCES
+{% for src in target.sources %}
+    {{ src }}
+{% endfor %}
+  AMENT_DEPS
+{% for dep in ament_dependencies %}
+    {{ dep }}
+{% endfor %}
+)
+
+{% endfor %}
+{% if cxx_c_language_sources %}
+set_source_files_properties(
+{% for p in cxx_c_language_sources %}
+  ${CMAKE_CURRENT_SOURCE_DIR}/{{ p }}
+{% endfor %}
+  PROPERTIES LANGUAGE CXX)
+{% endif %}
+install(TARGETS
+{% for target in node_targets %}
+  {{ target.executable }}
+{% endfor %}
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+{% if use_ament_lint %}
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
+{% endif %}
+
+ament_package()

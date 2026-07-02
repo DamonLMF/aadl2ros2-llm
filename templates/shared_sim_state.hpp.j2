@@ -1,0 +1,10 @@
+{# Shared simulation state for {{ package_name }}. #}
+#pragma once
+#include <mutex>
+
+struct SharedSimState {
+    mutable std::mutex mtx;
+{% for v in shared_vars %}
+    {{ v.cpp_type }} {{ v.name }}{ {{ v.initial_value }} };
+{% endfor %}
+};

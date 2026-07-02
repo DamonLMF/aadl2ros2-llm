@@ -1,0 +1,106 @@
+{# Target toolchain: ROS 2 Jazzy (rclcpp, ament_cmake) #}
+{% for inc in includes %}
+{{ inc }}
+{% endfor %}
+{% for line in other_code_include_lines %}
+{{ line }}
+{% endfor %}
+
+#include "{{ package_name }}/components/{{ class_name }}.hpp"
+
+{{ class_name }}::{{ class_name }}(rclcpp::Node* node, rclcpp::CallbackGroup::SharedPtr cb_group{% if has_shared_state %}, std::shared_ptr<SharedSimState> sim_state{% endif %})
+    : node_(node), callback_group_(cb_group),
+      logger_(rclcpp::get_logger("{{ node_name }}.{{ class_name }}")){% if use_fsm %},
+      fsm_state_("{{ fsm_wait_cpp }}"){% endif %}{% if has_shared_state %},
+      sim_state_(sim_state){% endif %}
+{
+{% if use_fsm %}
+    RCLCPP_INFO(logger_, "State transition: __begin__ -> %s", fsm_state_.c_str());
+{% endif %}
+{% for cb in callbacks %}
+    {{ cb.port }}_cache_ = nullptr;
+{% endfor %}
+
+    rclcpp::SubscriptionOptions sub_options;
+    sub_options.callback_group = callback_group_;
+
+{% for cb in callbacks %}
+    {
+{% for line in cb.qos_lines %}
+        {{ line }}
+{% endfor %}
+        sub_{{ cb.port }}_ = node_->create_subscription<{{ normalize_msg_type(cb.message_type) }}>(
+            "{{ cb.topic }}", qos,
+            std::bind(&{{ class_name }}::{{ cb.port }}_callback, this, std::placeholders::_1),
+            sub_options);
+    }
+{% endfor %}
+
+{% for out in outputs %}
+    {
+{% for line in out.qos_lines %}
+        {{ line }}
+{% endfor %}
+        pub_{{ out.member }}_ = node_->create_publisher<{{ normalize_msg_type(out.message_type) }}>("{{ out.topic }}", qos);
+    }
+{% endfor %}
+
+    timer_ = node_->create_wall_timer(
+        std::chrono::milliseconds({{ period_ms }}),
+        std::bind(&{{ class_name }}::control_loop, this),
+        callback_group_);
+
+    RCLCPP_INFO(logger_, "{{ class_name }} component initialized");
+}
+
+{% for cb in callbacks %}
+void {{ class_name }}::{{ cb.port }}_callback(const {{ normalize_msg_type(cb.message_type) }}::SharedPtr msg)
+{
+    {{ cb.port }}_cache_ = msg;
+{% set mt = normalize_msg_type(cb.message_type) %}
+{% if 'Int32' in mt %}
+    RCLCPP_INFO(logger_, "Received {{ cb.port }}: %d", static_cast<int>(msg->data));
+{% elif 'Float32' in mt %}
+    RCLCPP_INFO(logger_, "Received {{ cb.port }}: %f", static_cast<double>(msg->data));
+{% elif 'Bool' in mt %}
+    RCLCPP_INFO(logger_, "Received {{ cb.port }}: %s", msg->data ? "true" : "false");
+{% elif 'String' in mt %}
+    RCLCPP_INFO(logger_, "Received {{ cb.port }}: %s", msg->data.c_str());
+{% else %}
+    RCLCPP_INFO(logger_, "Received {{ cb.port }}: %f", static_cast<double>(msg->data));
+{% endif %}
+}
+
+{% endfor %}
+void {{ class_name }}::control_loop()
+{
+{% if compute_max_ms is not none %}
+    struct timespec start_thread_time, end_thread_time;
+    const double compute_max_ms = {{ compute_max_ms }};
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_thread_time);
+{% endif %}
+{% if deadline_ms is not none %}
+    struct timespec start_wall_time, end_wall_time;
+    const double deadline_ms = {{ deadline_ms }};
+    clock_gettime(CLOCK_MONOTONIC, &start_wall_time);
+{% endif %}
+
+{{ control_loop_llm_body }}
+
+{% if compute_max_ms is not none %}
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end_thread_time);
+    double thread_duration = (end_thread_time.tv_sec - start_thread_time.tv_sec) * 1000.0 +
+        (end_thread_time.tv_nsec - start_thread_time.tv_nsec) / 1000000.0;
+    if (thread_duration > compute_max_ms) {
+        RCLCPP_WARN(logger_, "Execution time exceeded thread computer time: %f > %f ms", thread_duration, compute_max_ms);
+    }
+{% endif %}
+{% if deadline_ms is not none %}
+    clock_gettime(CLOCK_MONOTONIC, &end_wall_time);
+    double wall_duration = (end_wall_time.tv_sec - start_wall_time.tv_sec) * 1000.0 +
+        (end_wall_time.tv_nsec - start_wall_time.tv_nsec) / 1000000.0;
+    if (wall_duration > deadline_ms) {
+        RCLCPP_WARN(logger_, "Deadline exceeded wall clock time: %f > %f ms", wall_duration, deadline_ms);
+    }
+{% endif %}
+}
