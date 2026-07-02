@@ -23,6 +23,7 @@ experiments/
 functional_tests/
 paper/
 validation_code/
+note.md
 
 # IDE files
 .vscode/
