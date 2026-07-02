@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Define LLM API URL and key
 # using deepseek api
 API_URL = "https://api.deepseek.com/v1"
-model = "deepseek-v4"
+model = "deepseek-v4-pro"
 temperature = 0.2
 
 # # Using qwen API
